@@ -1,0 +1,168 @@
+- hosts: rancher
+  become: true
+  tasks:
+    - name: install curl
+      apt:
+        name: curl
+        state: present
+        update_cache: yes
+
+    - name: download Helm installation script
+      shell: curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+      register: helm_install
+      changed_when: "'installed helm' in helm_install.stdout"
+
+    - name: verify Helm installation
+      shell: helm version --short
+      register: helm_version
+      changed_when: false
+
+    - name: display Helm version
+      debug:
+        msg: "{{ helm_version.stdout }}"
+
+    - name: create cattle-system namespace
+      shell: |
+        export KUBECONFIG=/home/codehuri/.kube/config
+        kubectl create namespace cattle-system
+      become_user: codehuri
+      register: ns_result
+      failed_when: "ns_result.rc != 0 and 'already exists' not in ns_result.stderr"
+      changed_when: "'created' in ns_result.stdout"
+
+    - name: add jetstack Helm repository for cert-manager
+      shell: |
+        export KUBECONFIG=/home/codehuri/.kube/config
+        helm repo add jetstack https://charts.jetstack.io
+        helm repo update
+      become_user: codehuri
+      register: repo_result
+      changed_when: "'has been added' in repo_result.stdout or 'Successfully got' in repo_result.stdout"
+
+    - name: create cert-manager namespace
+      shell: |
+        export KUBECONFIG=/home/codehuri/.kube/config
+        kubectl create namespace cert-manager
+      become_user: codehuri
+      register: cm_ns_result
+      failed_when: "cm_ns_result.rc != 0 and 'already exists' not in cm_ns_result.stderr"
+      changed_when: "'created' in cm_ns_result.stdout"
+
+    - name: install cert-manager CRDs
+      shell: |
+        export KUBECONFIG=/home/codehuri/.kube/config
+        kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.0/cert-manager.crds.yaml
+      become_user: codehuri
+      register: crds_result
+      changed_when: "'created' in crds_result.stdout or 'configured' in crds_result.stdout"
+
+    - name: wait for CRDs to be established
+      shell: |
+        export KUBECONFIG=/home/codehuri/.kube/config
+        kubectl wait --for=condition=Established crd/certificates.cert-manager.io --timeout=60s
+      become_user: codehuri
+      retries: 3
+      delay: 5
+
+    - name: install cert-manager via Helm
+      shell: |
+        export KUBECONFIG=/home/codehuri/.kube/config
+        helm install cert-manager jetstack/cert-manager \
+          --namespace cert-manager \
+          --version v1.13.0 \
+          --wait
+      become_user: codehuri
+      register: certmgr_result
+      failed_when: "certmgr_result.rc != 0 and 'already exists' not in certmgr_result.stderr"
+      changed_when: "'STATUS: deployed' in certmgr_result.stdout or 'deployed' in certmgr_result.stdout"
+
+    - name: wait for cert-manager pods to be ready
+      shell: |
+        export KUBECONFIG=/home/codehuri/.kube/config
+        kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=cert-manager -n cert-manager --timeout=300s
+      become_user: codehuri
+      retries: 5
+      delay: 10
+      ignore_errors: true
+
+    - name: add Rancher Helm repository
+      shell: |
+        export KUBECONFIG=/home/codehuri/.kube/config
+        helm repo add rancher-stable https://releases.rancher.com/server-charts/stable
+        helm repo update
+      become_user: codehuri
+      register: rancher_repo
+      changed_when: "'has been added' in rancher_repo.stdout or 'Successfully got' in rancher_repo.stdout"
+
+    - name: install Rancher via Helm
+      shell: |
+        export KUBECONFIG=/home/codehuri/.kube/config
+        helm install rancher rancher-stable/rancher \
+          --namespace cattle-system \
+          --set hostname=rancher.local \
+          --set replicas=1 \
+          --set bootstrapPassword=RancherAdmin123 \
+          --wait \
+          --timeout=10m
+      become_user: codehuri
+      register: rancher_result
+      failed_when: "rancher_result.rc != 0 and 'already exists' not in rancher_result.stderr"
+      changed_when: "'STATUS: deployed' in rancher_result.stdout"
+
+    - name: wait for Rancher deployment to be ready
+      shell: |
+        export KUBECONFIG=/home/codehuri/.kube/config
+        kubectl rollout status deployment/rancher -n cattle-system --timeout=300s
+      become_user: codehuri
+      retries: 5
+      delay: 15
+      ignore_errors: true
+
+    - name: get Rancher service info
+      shell: |
+        export KUBECONFIG=/home/codehuri/.kube/config
+        kubectl get svc -n cattle-system
+      become_user: codehuri
+      register: svc_result
+      changed_when: false
+
+    - name: display Rancher service info
+      debug:
+        msg: "{{ svc_result.stdout }}"
+
+    - name: get Rancher pod status
+      shell: |
+        export KUBECONFIG=/home/codehuri/.kube/config
+        kubectl get pods -n cattle-system
+      become_user: codehuri
+      register: pods_result
+      changed_when: false
+
+    - name: display Rancher pod status
+      debug:
+        msg: "{{ pods_result.stdout }}"
+
+    - name: display Rancher access information
+      debug:
+        msg: |
+          ========================================
+          Rancher Installation Complete!
+          ========================================
+          
+          Access Rancher at: https://rancher.local
+          (Add rancher.local to your /etc/hosts file pointing to your master node IP: 10.10.10.50)
+          
+          Or access via NodePort:
+          Run: kubectl get svc -n cattle-system
+          
+          Initial Bootstrap Password: RancherAdmin123
+          
+          Note: You may need to:
+          1. Add an entry to your local /etc/hosts:
+             10.10.10.50 rancher.local
+          2. Accept the self-signed certificate in your browser
+          3. Change the bootstrap password on first login
+          
+          Check pod status:
+          kubectl get pods -n cattle-system -w
+          ========================================
