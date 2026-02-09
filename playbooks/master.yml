@@ -36,12 +36,10 @@
         creates: cluster_initialized.log
 
     - name: create .kube directory
-      become: true
-      become_user: ubuntu
-      file:
-        path: $HOME/.kube
-        state: directory
-        mode: 0755
+      shell: |
+        mkdir -p /home/codehuri/.kube
+        chown ubuntu:ubuntu /home/codehuri/.kube
+        chmod 0755 /home/codehuri/.kube
 
     - name: copy admin.conf to user's kube config
       copy:
@@ -51,9 +49,8 @@
         owner: ubuntu
 
     - name: install Pod network
-      become: true
-      become_user: ubuntu
-      shell: kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml >> pod_network_setup.log
+      shell: |
+        export KUBECONFIG=/home/codehuri/.kube/config
+        sudo -u ubuntu kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml >> /home/codehuri/pod_network_setup.log
       args:
-        chdir: $HOME
-        creates: pod_network_setup.log
+        creates: /home/codehuri/pod_network_setup.log
