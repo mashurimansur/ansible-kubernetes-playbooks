@@ -32,7 +32,7 @@
     - name: initialize the cluster (this could take some time)
       shell: kubeadm init --config /etc/kubernetes/kubeadm-config.yaml >> cluster_initialized.log
       args:
-        chdir: /home/ubuntu
+        chdir: /home/codehuri
         creates: cluster_initialized.log
 
     - name: create .kube directory
@@ -46,7 +46,7 @@
     - name: copy admin.conf to user's kube config
       copy:
         src: /etc/kubernetes/admin.conf
-        dest: /home/ubuntu/.kube/config
+        dest: /home/codehuri/.kube/config
         remote_src: true
         owner: ubuntu
 

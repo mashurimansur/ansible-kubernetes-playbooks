@@ -20,5 +20,5 @@
     - name: join cluster
       shell: "{{ hostvars['k8s-master-1'].join_command }} >> node_joined.log"
       args:
-        chdir: /home/ubuntu
+        chdir: /home/codehuri
         creates: node_joined.log
