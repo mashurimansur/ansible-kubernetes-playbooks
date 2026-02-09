@@ -30,16 +30,11 @@
              - pods
 
     - name: initialize the cluster (this could take some time)
-      shell: kubeadm init --config /etc/kubernetes/kubeadm-config.yaml --ignore-preflight-errors=NumCPU >> cluster_initialized.log
+      shell: kubeadm init --config /etc/kubernetes/kubeadm-config.yaml --ignore-preflight-errors=NumCPU
       args:
         chdir: /home/codehuri
-        creates: cluster_initialized.log
-
-    - name: wait for admin.conf to be created
-      wait_for:
-        path: /etc/kubernetes/admin.conf
-        delay: 2
-        timeout: 30
+      register: kubeadm_init
+      failed_when: kubeadm_init.rc != 0 and "already exists" not in kubeadm_init.stderr
 
     - name: create .kube directory
       shell: |
@@ -53,6 +48,8 @@
         dest: /home/codehuri/.kube/config
         remote_src: true
         owner: codehuri
+      retries: 3
+      delay: 5
 
     - name: install Pod network
       shell: |
