@@ -35,10 +35,16 @@
         chdir: /home/codehuri
         creates: cluster_initialized.log
 
+    - name: wait for admin.conf to be created
+      wait_for:
+        path: /etc/kubernetes/admin.conf
+        delay: 2
+        timeout: 30
+
     - name: create .kube directory
       shell: |
         mkdir -p /home/codehuri/.kube
-        chown ubuntu:ubuntu /home/codehuri/.kube
+        chown codehuri:codehuri /home/codehuri/.kube
         chmod 0755 /home/codehuri/.kube
 
     - name: copy admin.conf to user's kube config
@@ -46,11 +52,11 @@
         src: /etc/kubernetes/admin.conf
         dest: /home/codehuri/.kube/config
         remote_src: true
-        owner: ubuntu
+        owner: codehuri
 
     - name: install Pod network
       shell: |
         export KUBECONFIG=/home/codehuri/.kube/config
-        sudo -u ubuntu kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml >> /home/codehuri/pod_network_setup.log
+        sudo -u codehuri kubectl apply -f https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml >> /home/codehuri/pod_network_setup.log
       args:
         creates: /home/codehuri/pod_network_setup.log
