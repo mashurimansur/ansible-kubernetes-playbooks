@@ -30,7 +30,7 @@
              - pods
 
     - name: initialize the cluster (this could take some time)
-      shell: kubeadm init --config /etc/kubernetes/kubeadm-config.yaml >> cluster_initialized.log
+      shell: kubeadm init --config /etc/kubernetes/kubeadm-config.yaml --ignore-preflight-errors=NumCPU >> cluster_initialized.log
       args:
         chdir: /home/codehuri
         creates: cluster_initialized.log
